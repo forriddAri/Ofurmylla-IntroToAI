@@ -18,9 +18,28 @@ class GameUI:
         pygame.display.set_caption("Ultimate Tic Tac Toe (WIP)")
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont(None, 24)
+        self.small_font = pygame.font.SysFont(None, 20)
+        self.tiny_font = pygame.font.SysFont(None, 16)
         self.title_font = pygame.font.SysFont(None, 52)
         self.menu_font = pygame.font.SysFont(None, 32)
         self.state = GameState()
+        self.fast_dashboard_enabled = False
+        self.fast_dashboard_title = "Fast Simulation"
+        self.fast_dashboard_lines: list[str] = []
+
+    def set_fast_dashboard(self, enabled: bool, title: str = "Fast Simulation", lines: list[str] | None = None):
+        self.fast_dashboard_enabled = enabled
+        self.fast_dashboard_title = title
+        self.fast_dashboard_lines = lines if lines is not None else []
+
+    def _fit_text(self, text: str, max_width: int, font: pygame.font.Font) -> str:
+        if font.size(text)[0] <= max_width:
+            return text
+
+        trimmed = text
+        while trimmed and font.size(trimmed + "...")[0] > max_width:
+            trimmed = trimmed[:-1]
+        return trimmed + "..." if trimmed else "..."
 
     def _draw_button(self, rect: pygame.Rect, text: str, selected: bool = False, hovered: bool = False):
         if selected:
@@ -105,7 +124,11 @@ class GameUI:
         self,
         x_type: str,
         o_type: str,
-        options: list[tuple[str, str]],
+        player_options: list[tuple[str, str]],
+        rounds_input_text: str,
+        rounds_input_active: bool,
+        show_fast_toggle: bool,
+        fast_simulation_enabled: bool,
         open_dropdown: str | None,
         hover_pos: tuple[int, int] | None = None,
     ):
@@ -118,29 +141,38 @@ class GameUI:
         self.screen.blit(x_label, (110, 180))
         o_label = self.menu_font.render("O Player", True, (20, 20, 20))
         self.screen.blit(o_label, (110, 300))
+        rounds_label = self.menu_font.render("Rounds", True, (20, 20, 20))
+        self.screen.blit(rounds_label, (110, 420))
+        if show_fast_toggle:
+            fast_label = self.menu_font.render("Fast Simulation", True, (20, 20, 20))
+            self.screen.blit(fast_label, (110, 480))
 
-        labels = dict(options)
+        player_labels = dict(player_options)
         x_dropdown_rect = pygame.Rect(250, 170, 260, 44)
         o_dropdown_rect = pygame.Rect(250, 290, 260, 44)
-        start_rect = pygame.Rect(220, 420, 160, 56)
+        rounds_input_rect = pygame.Rect(250, 410, 260, 44)
+        fast_toggle_rect = pygame.Rect(400, 470, 110, 44) if show_fast_toggle else None
+        start_rect = pygame.Rect(220, 550 if show_fast_toggle else 510, 160, 56)
 
         x_dropdown_hovered = hover_pos is not None and x_dropdown_rect.collidepoint(hover_pos)
         o_dropdown_hovered = hover_pos is not None and o_dropdown_rect.collidepoint(hover_pos)
+        rounds_input_hovered = hover_pos is not None and rounds_input_rect.collidepoint(hover_pos)
+        fast_toggle_hovered = show_fast_toggle and hover_pos is not None and fast_toggle_rect.collidepoint(hover_pos)
         start_hovered = hover_pos is not None and start_rect.collidepoint(hover_pos)
 
         x_option_rects = self._draw_dropdown(
             x_dropdown_rect,
-            labels[x_type],
+            player_labels[x_type],
             open_dropdown == "X",
             x_dropdown_hovered,
-            options,
+            player_options,
         )
         o_option_rects = self._draw_dropdown(
             o_dropdown_rect,
-            labels[o_type],
+            player_labels[o_type],
             open_dropdown == "O",
             o_dropdown_hovered,
-            options,
+            player_options,
         )
 
         x_hovered_value = None
@@ -155,10 +187,39 @@ class GameUI:
                 o_hovered_value = value
                 break
 
+        if rounds_input_active:
+            input_fill = (220, 235, 255)
+            input_border = (50, 100, 170)
+        elif rounds_input_hovered:
+            input_fill = (222, 228, 238)
+            input_border = (60, 60, 60)
+        else:
+            input_fill = (235, 235, 235)
+            input_border = (80, 80, 80)
+
+        pygame.draw.rect(self.screen, input_fill, rounds_input_rect, border_radius=8)
+        pygame.draw.rect(self.screen, input_border, rounds_input_rect, width=2, border_radius=8)
+        display_text = rounds_input_text if rounds_input_text else "0"
+        value_label = self.menu_font.render(display_text, True, (20, 20, 20))
+        text_x = rounds_input_rect.x + 14
+        text_y = rounds_input_rect.y + (rounds_input_rect.height - value_label.get_height()) // 2
+        self.screen.blit(value_label, (text_x, text_y))
+
+        if rounds_input_active:
+            if (pygame.time.get_ticks() // 500) % 2 == 0:
+                caret_x = text_x + value_label.get_width() + 2
+                caret_top = rounds_input_rect.y + 9
+                caret_bottom = rounds_input_rect.bottom - 9
+                pygame.draw.line(self.screen, (20, 20, 20), (caret_x, caret_top), (caret_x, caret_bottom), 2)
+
+        if show_fast_toggle and fast_toggle_rect is not None:
+            toggle_text = "On" if fast_simulation_enabled else "Off"
+            self._draw_button(fast_toggle_rect, toggle_text, fast_simulation_enabled, fast_toggle_hovered)
+
         self._draw_button(start_rect, "Start Game", False, start_hovered)
 
-        self._draw_dropdown_options(x_option_rects, options, x_type, x_hovered_value)
-        self._draw_dropdown_options(o_option_rects, options, o_type, o_hovered_value)
+        self._draw_dropdown_options(x_option_rects, player_options, x_type, x_hovered_value)
+        self._draw_dropdown_options(o_option_rects, player_options, o_type, o_hovered_value)
 
         pygame.display.flip()
 
@@ -167,6 +228,8 @@ class GameUI:
             "o_dropdown": o_dropdown_rect,
             "x_options": x_option_rects,
             "o_options": o_option_rects,
+            "rounds_input": rounds_input_rect,
+            "fast_toggle": fast_toggle_rect,
             "start": start_rect,
         }
 
@@ -258,21 +321,71 @@ class GameUI:
             pygame.draw.rect(overlay, (255, 255, 0, 45), (x, y, self.CELL * 3, self.CELL * 3))
         self.screen.blit(overlay, (0, 0))
 
-    def draw_status(self):
+    def draw_status(self, status_override: str | None = None):
         status_surface = pygame.Surface((self.SIZE, self.STATUS_H))
         status_surface.fill((220, 220, 220))
         self.screen.blit(status_surface, (0, 0))
-        text = self.state.status if self.state.game_over else f"Turn: {self.state.turn}   (Press R to reset)"
-        label = self.font.render(text, True, (10, 10, 10))
-        self.screen.blit(label, (10, 10))
+        if status_override is not None:
+            text = status_override
+        else:
+            text = self.state.status if self.state.game_over else f"Turn: {self.state.turn}   (Press R to reset)"
 
-    def draw_game(self):
+        if status_override is not None and " | " in text:
+            entries = text.split(" | ")
+            count = max(1, len(entries))
+            col_w = self.SIZE // count
+            for i, entry in enumerate(entries):
+                parts = entry.split(":", 1)
+                label_text = parts[0].strip() if len(parts) > 1 else entry.strip()
+                value_text = parts[1].strip() if len(parts) > 1 else ""
+
+                x = i * col_w
+                if i > 0:
+                    pygame.draw.line(self.screen, (170, 170, 170), (x, 6), (x, self.STATUS_H - 6), 1)
+
+                label_fitted = self._fit_text(label_text, col_w - 12, self.tiny_font)
+                label = self.tiny_font.render(label_fitted, True, (10, 10, 10))
+                self.screen.blit(label, label.get_rect(center=(x + col_w // 2, 12)))
+
+                value_fitted = self._fit_text(value_text, col_w - 12, self.small_font)
+                value = self.small_font.render(value_fitted, True, (10, 10, 10))
+                self.screen.blit(value, value.get_rect(center=(x + col_w // 2, 28)))
+        else:
+            label = self.font.render(text, True, (10, 10, 10))
+            self.screen.blit(label, (10, 10))
+
+    def draw_game(self, status_override: str | None = None):
         self.draw_grid()
         self.draw_allowed_highlight()
         self.draw_marks()
         self.draw_big_marks()
-        self.draw_status()
+        self.draw_status(status_override)
         pygame.display.flip()
+
+    def draw_fast_dashboard(self):
+        self.screen.fill((238, 238, 238))
+
+        title = self.title_font.render(self.fast_dashboard_title, True, (20, 20, 20))
+        self.screen.blit(title, title.get_rect(center=(self.SIZE // 2, 90)))
+
+        panel = pygame.Rect(90, 140, 420, 400)
+        pygame.draw.rect(self.screen, (245, 245, 245), panel, border_radius=12)
+        pygame.draw.rect(self.screen, (80, 80, 80), panel, width=2, border_radius=12)
+
+        y = 180
+        for line in self.fast_dashboard_lines:
+            fitted = self._fit_text(line, panel.width - 30, self.menu_font)
+            label = self.menu_font.render(fitted, True, (20, 20, 20))
+            self.screen.blit(label, (panel.x + 15, y))
+            y += 48
+
+        pygame.display.flip()
+
+    def draw_play_surface(self, status_override: str | None = None):
+        if self.fast_dashboard_enabled:
+            self.draw_fast_dashboard()
+        else:
+            self.draw_game(status_override)
 
     def _draw_two_button_overlay(
         self,
@@ -281,22 +394,32 @@ class GameUI:
         right_button_text: str,
         left_key: str,
         right_key: str,
+        detail_lines: list[str] | None = None,
     ):
-        self.draw_game()
+        self.draw_play_surface()
 
         overlay = pygame.Surface((self.SIZE, self.SIZE + self.STATUS_H), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 120))
         self.screen.blit(overlay, (0, 0))
 
-        panel = pygame.Rect(100, 180, 400, 240)
+        has_details = bool(detail_lines)
+        panel = pygame.Rect(100, 150, 400, 300) if has_details else pygame.Rect(100, 180, 400, 240)
         pygame.draw.rect(self.screen, (245, 245, 245), panel, border_radius=12)
         pygame.draw.rect(self.screen, (80, 80, 80), panel, width=2, border_radius=12)
 
         title = self.menu_font.render(title_text, True, (20, 20, 20))
-        self.screen.blit(title, title.get_rect(center=(self.SIZE // 2, 235)))
+        title_y = 195 if has_details else 235
+        self.screen.blit(title, title.get_rect(center=(self.SIZE // 2, title_y)))
 
-        left_rect = pygame.Rect(150, 300, 140, 52)
-        right_rect = pygame.Rect(310, 300, 140, 52)
+        if has_details and detail_lines is not None:
+            start_y = 235
+            for index, line in enumerate(detail_lines):
+                detail_label = self.font.render(line, True, (20, 20, 20))
+                self.screen.blit(detail_label, detail_label.get_rect(center=(self.SIZE // 2, start_y + index * 28)))
+
+        button_y = 360 if has_details else 300
+        left_rect = pygame.Rect(150, button_y, 140, 52)
+        right_rect = pygame.Rect(310, button_y, 140, 52)
 
         self._draw_button(left_rect, left_button_text, False)
         self._draw_button(right_rect, right_button_text, False)
@@ -308,7 +431,7 @@ class GameUI:
             right_key: right_rect,
         }
 
-    def draw_game_over(self, result_text: str | None = None):
+    def draw_game_over(self, result_text: str | None = None, detail_lines: list[str] | None = None):
         winner_text = result_text if result_text else (self.state.status if self.state.status else "Game Over")
         return self._draw_two_button_overlay(
             winner_text,
@@ -316,10 +439,11 @@ class GameUI:
             "Main Menu",
             "play_again",
             "main_menu",
+            detail_lines,
         )
 
     def draw_escape_menu(self):
-        self.draw_game()
+        self.draw_play_surface()
 
         overlay = pygame.Surface((self.SIZE, self.SIZE + self.STATUS_H), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 120))

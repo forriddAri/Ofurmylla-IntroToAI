@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+from basic_logical_ai import BasicLogicalAI
 from human_player import HumanPlayer
 from random_ai import RandomAI
 
@@ -17,6 +18,10 @@ def _build_random_ai(symbol: str):
     return RandomAI(symbol)
 
 
+def _build_basic_logical_ai(symbol: str):
+    return BasicLogicalAI(symbol)
+
+
 PLAYER_REGISTRY: dict[str, dict[str, object]] = {
     "human": {
         "label": "Human",
@@ -26,6 +31,11 @@ PLAYER_REGISTRY: dict[str, dict[str, object]] = {
     "random_ai": {
         "label": "Random AI",
         "factory": _build_random_ai,
+        "is_human": False,
+    },
+    "basic_logical_ai": {
+        "label": "Basic Logical AI",
+        "factory": _build_basic_logical_ai,
         "is_human": False,
     },
 }
