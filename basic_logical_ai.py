@@ -1,26 +1,36 @@
 from __future__ import annotations
 
-from player_types import GameSnapshot, Move
+from game import GameState
+from player_types import Move
 
 
 class BasicLogicalAI:
-    def __init__(self, symbol: str):
+    def __init__(self, symbol: str, game: GameState):
         self.symbol = symbol
+        self.game = game
 
-    def choose_move(self, state: GameSnapshot, legal_moves: list[Move]) -> Move | None:
+    def choose_move(self) -> Move | None:
+        legal_moves = self.game.legal_moves()
         if not legal_moves:
             return None
 
-        board = state["board"]
         opponent = "O" if self.symbol == "X" else "X"
 
-        for move in legal_moves:
-            if self._wins_subboard(board, move, self.symbol):
-                return move
+        winning_big_moves = self.game.winning_bigboard_moves(self.symbol, legal_moves)
+        if winning_big_moves:
+            return winning_big_moves[0]
 
-        for move in legal_moves:
-            if self._wins_subboard(board, move, opponent):
-                return move
+        blocking_big_moves = self.game.winning_bigboard_moves(opponent, legal_moves)
+        if blocking_big_moves:
+            return blocking_big_moves[0]
+
+        winning_sub_moves = self.game.winning_subboard_moves(self.symbol, legal_moves)
+        if winning_sub_moves:
+            return winning_sub_moves[0]
+
+        blocking_sub_moves = self.game.winning_subboard_moves(opponent, legal_moves)
+        if blocking_sub_moves:
+            return blocking_sub_moves[0]
 
         centers = [move for move in legal_moves if move[0] % 3 == 1 and move[1] % 3 == 1]
         if centers:
@@ -35,24 +45,3 @@ class BasicLogicalAI:
             return corners[0]
 
         return legal_moves[0]
-
-    def _wins_subboard(self, board: list[list[str]], move: Move, symbol: str) -> bool:
-        r, c = move
-        sb_r, sb_c = r // 3, c // 3
-        r0, c0 = sb_r * 3, sb_c * 3
-
-        local = [[board[r0 + i][c0 + j] for j in range(3)] for i in range(3)]
-        local[r % 3][c % 3] = symbol
-
-        for i in range(3):
-            if all(local[i][j] == symbol for j in range(3)):
-                return True
-            if all(local[j][i] == symbol for j in range(3)):
-                return True
-
-        if all(local[i][i] == symbol for i in range(3)):
-            return True
-        if all(local[i][2 - i] == symbol for i in range(3)):
-            return True
-
-        return False

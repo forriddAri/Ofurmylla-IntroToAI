@@ -1,4 +1,6 @@
 import sys
+from concurrent.futures import Future, ThreadPoolExecutor
+from typing import Any
 
 import pygame
 
@@ -7,6 +9,20 @@ from ui import GameUI
 
 
 PLAYER_OPTIONS = get_player_options()
+
+
+def _compute_ai_move(ai_player: Any, state_snapshot: Any):
+    has_game_attr = hasattr(ai_player, "game")
+    original_game = getattr(ai_player, "game", None)
+
+    if has_game_attr:
+        setattr(ai_player, "game", state_snapshot)
+
+    try:
+        return ai_player.choose_move()
+    finally:
+        if has_game_attr:
+            setattr(ai_player, "game", original_game)
 
 
 def build_winner_text(status: str, player_types: dict[str, str]) -> str:
@@ -56,8 +72,8 @@ def run():
     }
 
     players = {
-        "X": build_player("X", player_types["X"]),
-        "O": build_player("O", player_types["O"]),
+        "X": build_player("X", player_types["X"], state),
+        "O": build_player("O", player_types["O"], state),
     }
 
     screen_mode = "menu"
@@ -79,6 +95,88 @@ def run():
     series_active = False
     match_has_human = True
     fast_simulation_enabled = True
+
+    ai_executor = ThreadPoolExecutor(max_workers=2)
+    ai_future: Future | None = None
+    ai_expected_revision: int | None = None
+    ai_expected_turn: str | None = None
+    ai_expected_type: str | None = None
+    state_revision = 0
+
+    def bump_state_revision():
+        nonlocal state_revision
+        state_revision += 1
+
+    def reset_state():
+        state.reset()
+        bump_state_revision()
+
+    def apply_move_and_track(r: int, c: int) -> bool:
+        if state.apply_move(r, c):
+            bump_state_revision()
+            return True
+        return False
+
+    def queue_ai_move_if_needed():
+        nonlocal ai_future, ai_expected_revision, ai_expected_turn, ai_expected_type
+
+        if ai_future is not None:
+            return
+
+        if screen_mode != "playing" or state.game_over:
+            return
+
+        current_turn = state.turn
+        current_type = player_types[current_turn]
+        if is_human_type(current_type):
+            return
+
+        state_snapshot = state.clone()
+        ai_player = players[current_turn]
+        ai_future = ai_executor.submit(_compute_ai_move, ai_player, state_snapshot)
+        ai_expected_revision = state_revision
+        ai_expected_turn = current_turn
+        ai_expected_type = current_type
+
+    def consume_ai_result_if_ready():
+        nonlocal ai_future, ai_expected_revision, ai_expected_turn, ai_expected_type
+
+        if ai_future is None or not ai_future.done():
+            return
+
+        expected_revision = ai_expected_revision
+        expected_turn = ai_expected_turn
+        expected_type = ai_expected_type
+
+        try:
+            move = ai_future.result()
+        except Exception:
+            move = None
+
+        ai_future = None
+        ai_expected_revision = None
+        ai_expected_turn = None
+        ai_expected_type = None
+
+        if screen_mode != "playing" or state.game_over:
+            return
+
+        if expected_revision != state_revision:
+            return
+
+        if expected_turn is None or expected_type is None:
+            return
+
+        if state.turn != expected_turn:
+            return
+
+        if player_types.get(state.turn) != expected_type:
+            return
+
+        if move is not None and apply_move_and_track(move[0], move[1]):
+            draw_current_game()
+            if state.game_over:
+                handle_finished_game()
 
     def render_menu():
         nonlocal menu_buttons
@@ -130,8 +228,8 @@ def run():
         nonlocal series_total_rounds, series_current_round, series_scores, series_active, match_has_human
 
         players = {
-            "X": build_player("X", player_types["X"]),
-            "O": build_player("O", player_types["O"]),
+            "X": build_player("X", player_types["X"], state),
+            "O": build_player("O", player_types["O"], state),
         }
 
         parsed_rounds = int(rounds_input_text) if rounds_input_text.isdigit() else 1
@@ -149,7 +247,7 @@ def run():
         )
         match_has_human = is_human_type(player_types["X"]) or is_human_type(player_types["O"])
 
-        state.reset()
+        reset_state()
         screen_mode = "playing"
         open_dropdown = None
         game_over_buttons = None
@@ -172,7 +270,7 @@ def run():
 
             if series_current_round < series_total_rounds:
                 series_current_round += 1
-                state.reset()
+                reset_state()
                 draw_current_game()
                 if not render_round_reset:
                     pygame.event.pump()
@@ -194,6 +292,7 @@ def run():
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                ai_executor.shutdown(wait=False, cancel_futures=True)
                 ui.close()
                 sys.exit()
 
@@ -218,7 +317,7 @@ def run():
                         draw_current_game()
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_r and screen_mode == "playing":
-                state.reset()
+                reset_state()
                 game_over_buttons = None
                 draw_current_game()
 
@@ -289,7 +388,7 @@ def run():
                     and is_human_type(player_types[state.turn])
                 ):
                     cell = ui.pixel_to_cell(mx, my)
-                    if cell is not None and state.apply_move(cell[0], cell[1]):
+                    if cell is not None and apply_move_and_track(cell[0], cell[1]):
                         draw_current_game()
                         if state.game_over:
                             handle_finished_game()
@@ -298,7 +397,7 @@ def run():
                     if game_over_buttons["play_again"].collidepoint(mx, my):
                         start_match()
                     elif game_over_buttons["main_menu"].collidepoint(mx, my):
-                        state.reset()
+                        reset_state()
                         screen_mode = "menu"
                         open_dropdown = None
                         game_over_buttons = None
@@ -316,7 +415,7 @@ def run():
                     elif escape_menu_buttons["reset"].collidepoint(mx, my):
                         start_match()
                     elif escape_menu_buttons["main_menu"].collidepoint(mx, my):
-                        state.reset()
+                        reset_state()
                         screen_mode = "menu"
                         open_dropdown = None
                         escape_menu_buttons = None
@@ -326,40 +425,12 @@ def run():
         if screen_mode == "menu":
             render_menu()
 
-        if screen_mode == "playing" and not state.game_over and not is_human_type(player_types[state.turn]):
-            if not match_has_human and fast_simulation_enabled:
-                steps = 0
-                max_steps = 200000
-
-                while screen_mode == "playing" and steps < max_steps:
-                    if state.game_over:
-                        handle_finished_game(render_round_reset=False)
-                        steps += 1
-                        continue
-
-                    if is_human_type(player_types[state.turn]):
-                        break
-
-                    ai_player = players[state.turn]
-                    move = ai_player.choose_move(state.snapshot(), state.legal_moves())
-                    if move is None:
-                        break
-                    if not state.apply_move(move[0], move[1]):
-                        break
-                    steps += 1
-
-                if screen_mode == "playing" and not state.game_over:
-                    draw_current_game()
-            else:
-                ai_player = players[state.turn]
-                move = ai_player.choose_move(state.snapshot(), state.legal_moves())
-                if move is not None and state.apply_move(move[0], move[1]):
-                    draw_current_game()
-                    if state.game_over:
-                        handle_finished_game()
+        consume_ai_result_if_ready()
 
         if screen_mode == "playing" and state.game_over and game_over_buttons is None:
             handle_finished_game()
+
+        queue_ai_move_if_needed()
 
         ui.tick()
 

@@ -1,20 +1,16 @@
 from __future__ import annotations
 
-from typing import Protocol, TypedDict
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from game import GameState
 
 Move = tuple[int, int]
 
 
-class GameSnapshot(TypedDict):
-    board: list[list[str]]
-    big_board: list[list[str | None]]
-    turn: str
-    last_move: tuple[int, int] | None
-    game_over: bool
-
-
 class Player(Protocol):
     symbol: str
+    game: GameState
 
-    def choose_move(self, state: GameSnapshot, legal_moves: list[Move]) -> Move | None:
+    def choose_move(self) -> Move | None:
         ...

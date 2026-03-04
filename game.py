@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 GRID = 9
+Move = tuple[int, int]
 
 
 @dataclass
@@ -14,6 +15,16 @@ class GameState:
     status: str = ""
     last_move: tuple[int, int] | None = None
     big_board: list[list[str | None]] = field(default_factory=lambda: [[None for _ in range(3)] for _ in range(3)])
+
+    def clone(self) -> GameState:
+        return GameState(
+            board=[row[:] for row in self.board],
+            turn=self.turn,
+            game_over=self.game_over,
+            status=self.status,
+            last_move=self.last_move,
+            big_board=[row[:] for row in self.big_board],
+        )
 
     def reset(self) -> None:
         self.board = [["" for _ in range(GRID)] for _ in range(GRID)]
@@ -104,7 +115,7 @@ class GameState:
                         moves.append((rr, cc))
         return moves
 
-    def apply_move(self, r: int, c: int) -> bool:
+    def is_move_legal(self, r: int, c: int) -> bool:
         if self.game_over:
             return False
 
@@ -121,6 +132,62 @@ class GameState:
         if self.board[r][c] != "":
             return False
 
+        return True
+
+    def would_win_subboard(self, move: Move, symbol: str) -> bool:
+        r, c = move
+        if not (0 <= r < GRID and 0 <= c < GRID):
+            return False
+
+        if self.board[r][c] != "":
+            return False
+
+        sb_r, sb_c = r // 3, c // 3
+        if self.big_board[sb_r][sb_c] is not None:
+            return False
+
+        r0, c0 = sb_r * 3, sb_c * 3
+        local = [[self.board[r0 + i][c0 + j] for j in range(3)] for i in range(3)]
+        local[r % 3][c % 3] = symbol
+
+        for i in range(3):
+            if all(local[i][j] == symbol for j in range(3)):
+                return True
+            if all(local[j][i] == symbol for j in range(3)):
+                return True
+
+        if all(local[i][i] == symbol for i in range(3)):
+            return True
+        if all(local[i][2 - i] == symbol for i in range(3)):
+            return True
+
+        return False
+
+    def winning_subboard_moves(self, symbol: str, moves: list[Move] | None = None) -> list[Move]:
+        candidates = moves if moves is not None else self.legal_moves()
+        return [move for move in candidates if self.would_win_subboard(move, symbol)]
+
+    def simulate_move(self, move: Move, symbol: str | None = None) -> GameState | None:
+        simulated = self.clone()
+        if symbol is not None:
+            simulated.turn = symbol
+        if not simulated.apply_move(move[0], move[1]):
+            return None
+        return simulated
+
+    def would_win_bigboard(self, move: Move, symbol: str) -> bool:
+        simulated = self.simulate_move(move, symbol)
+        return simulated is not None and simulated.status == f"{symbol} wins"
+
+    def winning_bigboard_moves(self, symbol: str, moves: list[Move] | None = None) -> list[Move]:
+        candidates = moves if moves is not None else self.legal_moves()
+        return [move for move in candidates if self.would_win_bigboard(move, symbol)]
+
+    def apply_move(self, r: int, c: int) -> bool:
+        if not self.is_move_legal(r, c):
+            return False
+
+        sb_r, sb_c = r // 3, c // 3
         self.board[r][c] = self.turn
         self.last_move = (r, c)
 
