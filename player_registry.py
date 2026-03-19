@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from typing import Callable
 
+from ari_ai import AI as AriAI
+from arnkatla_ai import AI as ArnkatlaAI
 from basic_logical_ai import BasicLogicalAI
+from egill_ai import AI as EgillAI
 from game import GameState
 from human_player import HumanPlayer
 from recursive_ai import RecursiveAI
 from random_ai import RandomAI
-from ai import AI
+from tumi_ai import AI as TumiAI
 
 
 PlayerFactory = Callable[[str, GameState], object]
@@ -28,8 +31,21 @@ def _build_basic_logical_ai(symbol: str, game: GameState):
 def _build_recursive_ai(symbol: str, game: GameState):
     return RecursiveAI(symbol, game)
 
-def _build_ai(symbol: str, game: GameState):
-    return AI(symbol, game)
+
+def _build_ari_ai(symbol: str, game: GameState):
+    return AriAI(symbol, game)
+
+
+def _build_arnkatla_ai(symbol: str, game: GameState):
+    return ArnkatlaAI(symbol, game)
+
+
+def _build_tumi_ai(symbol: str, game: GameState):
+    return TumiAI(symbol, game)
+
+
+def _build_egill_ai(symbol: str, game: GameState):
+    return EgillAI(symbol, game)
 
 PLAYER_REGISTRY: dict[str, dict[str, object]] = {
     "human": {
@@ -52,9 +68,24 @@ PLAYER_REGISTRY: dict[str, dict[str, object]] = {
         "factory": _build_recursive_ai,
         "is_human": False,
     },
-    "ai": {
-        "label": "AI",
-        "factory": _build_ai,
+    "ari_ai": {
+        "label": "Ari AI",
+        "factory": _build_ari_ai,
+        "is_human": False,
+    },
+    "arnkatla_ai": {
+        "label": "Arnkatla AI",
+        "factory": _build_arnkatla_ai,
+        "is_human": False,
+    },
+    "tumi_ai": {
+        "label": "Tumi AI",
+        "factory": _build_tumi_ai,
+        "is_human": False,
+    },
+    "egill_ai": {
+        "label": "Egill AI",
+        "factory": _build_egill_ai,
         "is_human": False,
     },
 }
