@@ -34,7 +34,7 @@ class AI:
             return self._evaluate(state)
 
         if maximizing:
-            # Our turn — we want the highest possible score
+            # Player 1, we want the highest possible score
             max_eval = float('-inf')
             for move in state.legal_moves():
                 simulated = state.simulate_move(move, self.symbol)
@@ -48,7 +48,7 @@ class AI:
                     break
             return max_eval
         else:
-            # Opponent's turn — they want the lowest possible score for us
+            # Player 2, they want the lowest possible score for us
             opponent = 'O' if self.symbol == 'X' else 'X'
             min_eval = float('inf')
             for move in state.legal_moves():
