@@ -4,7 +4,7 @@
 
 The project requires Python 3 and the `pygame` library.
 
-### Easiest (single command)
+### Single command
 
 From this folder, run:
 

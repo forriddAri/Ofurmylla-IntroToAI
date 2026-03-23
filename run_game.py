@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parent
 
 def ensure_pygame_installed() -> None:
     try:
-        import pygame  # type: ignore  # noqa: F401
+        import pygame
         return
     except ImportError:
         print("pygame not found. Installing pygame (this requires internet access)...")
@@ -18,7 +18,6 @@ def ensure_pygame_installed() -> None:
 
 def main() -> None:
     ensure_pygame_installed()
-    # Run main.py with the same Python executable
     subprocess.check_call([sys.executable, str(ROOT / "main.py")])
 
 
