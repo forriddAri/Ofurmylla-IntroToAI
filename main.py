@@ -174,9 +174,13 @@ def run():
             return
 
         if move is not None and apply_move_and_track(move[0], move[1]):
+            player = players[expected_turn]
+            if hasattr(player, 'nodes_evaluated'):
+                print(f"Nodes evaluated: {player.nodes_evaluated}")
             draw_current_game()
             if state.game_over:
                 handle_finished_game()
+    
 
     def render_menu():
         nonlocal menu_buttons
